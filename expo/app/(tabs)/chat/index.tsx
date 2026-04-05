@@ -14,13 +14,17 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useMutation } from "@tanstack/react-query";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
-import { Send } from "lucide-react-native";
+import { Send, Shield } from "lucide-react-native";
 import Colors from "@/constants/colors";
 import { ChatMessage } from "@/types";
 import { callChatFunction } from "@/utils/firebase";
+import { useAuth } from "@/providers/AuthProvider";
+import { useRouter } from "expo-router";
 
 export default function ChatScreen() {
   const insets = useSafeAreaInsets();
+  const { isAuthenticated } = useAuth();
+  const router = useRouter();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState("");
   const [conversationId, setConversationId] = useState<string | null>(null);
@@ -93,6 +97,35 @@ export default function ChatScreen() {
   }, []);
 
   const keyExtractor = useCallback((item: ChatMessage) => item.id, []);
+
+  if (!isAuthenticated) {
+    return (
+      <LinearGradient
+        colors={[Colors.background, Colors.backgroundEnd]}
+        style={[styles.container, { paddingTop: insets.top }]}
+      >
+        <View style={styles.authPromptContainer}>
+          <View style={styles.authIconCircle}>
+            <Shield color={Colors.accent} size={32} />
+          </View>
+          <Text style={styles.authTitle}>ログインが必要です</Text>
+          <Text style={styles.authDescription}>
+            AIコーチと会話するには{"\n"}ログインしてください
+          </Text>
+          <Pressable
+            style={({ pressed }) => [
+              styles.authButton,
+              pressed && { opacity: 0.8 },
+            ]}
+            onPress={() => router.push("/auth")}
+            testID="chat-login-button"
+          >
+            <Text style={styles.authButtonText}>ログイン</Text>
+          </Pressable>
+        </View>
+      </LinearGradient>
+    );
+  }
 
   return (
     <LinearGradient
@@ -312,5 +345,50 @@ const styles = StyleSheet.create({
   },
   sendButtonDisabled: {
     opacity: 0.3,
+  },
+  authPromptContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 32,
+  },
+  authIconCircle: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: Colors.accentDim,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: "rgba(139,0,0,0.25)",
+  },
+  authTitle: {
+    fontSize: 20,
+    fontWeight: "700" as const,
+    color: Colors.text,
+    marginBottom: 10,
+    letterSpacing: 0.5,
+  },
+  authDescription: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+    textAlign: "center" as const,
+    lineHeight: 22,
+    marginBottom: 32,
+    fontWeight: "300" as const,
+  },
+  authButton: {
+    backgroundColor: Colors.accent,
+    borderRadius: 14,
+    paddingVertical: 16,
+    paddingHorizontal: 48,
+    alignItems: "center",
+  },
+  authButtonText: {
+    fontSize: 16,
+    fontWeight: "700" as const,
+    color: Colors.white,
+    letterSpacing: 0.5,
   },
 });
