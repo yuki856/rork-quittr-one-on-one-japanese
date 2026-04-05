@@ -29,6 +29,24 @@ export { app, auth };
 const CLOUD_FUNCTION_BASE =
   "https://asia-northeast1-nofa-ai.cloudfunctions.net";
 
+async function fetchWithTimeout(
+  url: string,
+  options: RequestInit,
+  timeoutMs: number = 30000
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+    return response;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 export async function callChatFunction(params: {
   message: string;
   conversationId: string | null;
@@ -39,7 +57,7 @@ export async function callChatFunction(params: {
     throw new Error("ログインが必要です");
   }
 
-  const token = await user.getIdToken();
+  const token = await user.getIdToken(true);
 
   console.log("[Firebase] Calling chat function with:", {
     message: params.message,
@@ -47,30 +65,76 @@ export async function callChatFunction(params: {
     scenario: params.scenario,
   });
 
-  const response = await fetch(`${CLOUD_FUNCTION_BASE}/chat`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify({
-      message: params.message,
-      conversationId: params.conversationId,
-      scenario: params.scenario,
-    }),
-  });
+  const maxRetries = 2;
+  let lastError: Error | null = null;
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error(
-      "[Firebase] Chat function error:",
-      response.status,
-      errorText
-    );
-    throw new Error(`チャットエラー: ${response.status}`);
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      if (attempt > 0) {
+        console.log(`[Firebase] Retry attempt ${attempt}/${maxRetries}`);
+        await new Promise((r) => setTimeout(r, 1000 * attempt));
+      }
+
+      const response = await fetchWithTimeout(
+        `${CLOUD_FUNCTION_BASE}/chat`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            message: params.message,
+            conversationId: params.conversationId,
+            scenario: params.scenario,
+          }),
+        },
+        30000
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(
+          "[Firebase] Chat function error:",
+          response.status,
+          errorText
+        );
+        throw new Error(`チャットエラー: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log("[Firebase] Chat function response:", data);
+      return data as { reply: string; conversationId: string };
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      lastError = err;
+      console.error(`[Firebase] Attempt ${attempt} failed:`, err.message);
+
+      if (err.name === "AbortError") {
+        lastError = new Error("接続がタイムアウトしました。もう一度お試しください。");
+        continue;
+      }
+
+      if (
+        err.message.includes("Failed to fetch") ||
+        err.message.includes("Network request failed") ||
+        err.message.includes("network")
+      ) {
+        lastError = new Error(
+          "サーバーに接続できません。ネットワーク接続を確認してください。"
+        );
+        if (attempt < maxRetries) continue;
+      }
+
+      if (
+        !err.message.includes("Failed to fetch") &&
+        !err.message.includes("Network request failed") &&
+        err.name !== "AbortError"
+      ) {
+        throw err;
+      }
+    }
   }
 
-  const data = await response.json();
-  console.log("[Firebase] Chat function response:", data);
-  return data as { reply: string; conversationId: string };
+  throw lastError ?? new Error("不明なエラーが発生しました。");
 }
