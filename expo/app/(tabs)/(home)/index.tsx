@@ -12,7 +12,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
-import { Wind, RotateCcw, Trophy, Flame, Calendar } from "lucide-react-native";
+import { Wind, RotateCcw, Trophy, Flame, Calendar, ShieldAlert } from "lucide-react-native";
 import Colors, { getStreakColor, getStreakGlow } from "@/constants/colors";
 import { useStreak } from "@/providers/StreakProvider";
 import { formatDate } from "@/utils/time";
@@ -36,6 +36,9 @@ export default function HomeScreen() {
   const fadeIn = useRef(new Animated.Value(0)).current;
   const buttonScaleRelapse = useRef(new Animated.Value(1)).current;
   const buttonScaleBreath = useRef(new Animated.Value(1)).current;
+  const panicPulse = useRef(new Animated.Value(1)).current;
+  const panicGlow = useRef(new Animated.Value(0.3)).current;
+  const buttonScalePanic = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     setDisplayStreak(currentStreak);
@@ -80,11 +83,45 @@ export default function HomeScreen() {
     );
     glow.start();
 
+    const panicPulseLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(panicPulse, {
+          toValue: 1.03,
+          duration: 1800,
+          useNativeDriver: true,
+        }),
+        Animated.timing(panicPulse, {
+          toValue: 1,
+          duration: 1800,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    panicPulseLoop.start();
+
+    const panicGlowLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(panicGlow, {
+          toValue: 0.6,
+          duration: 1800,
+          useNativeDriver: true,
+        }),
+        Animated.timing(panicGlow, {
+          toValue: 0.3,
+          duration: 1800,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    panicGlowLoop.start();
+
     return () => {
       pulse.stop();
       glow.stop();
+      panicPulseLoop.stop();
+      panicGlowLoop.stop();
     };
-  }, [fadeIn, pulseAnim, glowAnim]);
+  }, [fadeIn, pulseAnim, glowAnim, panicPulse, panicGlow]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -124,6 +161,11 @@ export default function HomeScreen() {
   const handleBreathing = useCallback(() => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     router.push("/breathing");
+  }, [router]);
+
+  const handlePanic = useCallback(() => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    router.push("/panic");
   }, [router]);
 
   return (
@@ -205,6 +247,31 @@ export default function HomeScreen() {
             </View>
           </View>
 
+          <Animated.View style={[styles.panicButtonWrapper, { transform: [{ scale: panicPulse }] }]}>
+            <Animated.View
+              style={[
+                styles.panicGlowBg,
+                { opacity: panicGlow },
+              ]}
+            />
+            <Animated.View style={{ transform: [{ scale: buttonScalePanic }], width: "100%" }}>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.panicButton,
+                  pressed && { opacity: 0.85 },
+                ]}
+                onPress={() => animateButton(buttonScalePanic, handlePanic)}
+                testID="panic-button"
+              >
+                <ShieldAlert color="#FFFFFF" size={22} strokeWidth={2} />
+                <View style={styles.panicTextWrap}>
+                  <Text style={styles.panicButtonTitle}>パニックボタン</Text>
+                  <Text style={styles.panicButtonSub}>衝動が来たらここを押せ</Text>
+                </View>
+              </Pressable>
+            </Animated.View>
+          </Animated.View>
+
           <View style={styles.actionsContainer}>
             <Animated.View style={[styles.actionFlex, { transform: [{ scale: buttonScaleRelapse }] }]}>
               <Pressable
@@ -266,7 +333,7 @@ const styles = StyleSheet.create({
     marginBottom: 40,
   },
   streakOuter: {
-    marginBottom: 56,
+    marginBottom: 48,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -325,7 +392,7 @@ const styles = StyleSheet.create({
     borderColor: Colors.glassBorder,
     paddingVertical: 22,
     paddingHorizontal: 8,
-    marginBottom: 32,
+    marginBottom: 24,
     width: "100%",
     ...(Platform.OS !== "web"
       ? { shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 12 }
@@ -351,6 +418,52 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: Colors.textMuted,
     fontWeight: "400" as const,
+    letterSpacing: 0.5,
+  },
+  panicButtonWrapper: {
+    width: "100%",
+    marginBottom: 16,
+    alignItems: "center",
+    position: "relative",
+  },
+  panicGlowBg: {
+    position: "absolute",
+    top: -8,
+    left: -8,
+    right: -8,
+    bottom: -8,
+    borderRadius: 22,
+    backgroundColor: "rgba(192,57,43,0.15)",
+    ...(Platform.OS !== "web"
+      ? { shadowColor: "#C0392B", shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.4, shadowRadius: 20 }
+      : {}),
+  },
+  panicButton: {
+    width: "100%",
+    borderRadius: 16,
+    backgroundColor: "rgba(192,57,43,0.25)",
+    borderWidth: 1.5,
+    borderColor: "rgba(192,57,43,0.45)",
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 18,
+    paddingHorizontal: 20,
+    gap: 14,
+  },
+  panicTextWrap: {
+    flex: 1,
+    gap: 2,
+  },
+  panicButtonTitle: {
+    fontSize: 17,
+    fontWeight: "800" as const,
+    color: "#FFFFFF",
+    letterSpacing: 1,
+  },
+  panicButtonSub: {
+    fontSize: 12,
+    fontWeight: "300" as const,
+    color: "rgba(255,255,255,0.6)",
     letterSpacing: 0.5,
   },
   actionsContainer: {

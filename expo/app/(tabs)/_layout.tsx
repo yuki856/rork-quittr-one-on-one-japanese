@@ -1,111 +1,54 @@
 import { Tabs } from "expo-router";
-import { Home, MessageSquare, CalendarDays, User } from "lucide-react-native";
-import React, { useRef, useEffect } from "react";
-import { StyleSheet, View, Text, Animated } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import Colors from "@/constants/colors";
+import { Home, MessageCircle, CalendarDays, UserCircle } from "lucide-react-native";
+import React, { useRef } from "react";
+import { View, Text, StyleSheet, Animated, Pressable, Platform } from "react-native";
+import * as Haptics from "expo-haptics";
 
-function TabIcon({
-  Icon,
-  color,
-  focused,
-  label,
-}: {
-  Icon: typeof Home;
-  color: string;
-  focused: boolean;
+
+interface TabBarIconProps {
+  icon: React.ReactNode;
   label: string;
-}) {
-  const scaleAnim = useRef(new Animated.Value(1)).current;
-  const prevFocused = useRef(focused);
+  focused: boolean;
+}
 
-  useEffect(() => {
-    if (focused && !prevFocused.current) {
-      scaleAnim.setValue(1);
-      Animated.sequence([
-        Animated.spring(scaleAnim, {
-          toValue: 1.2,
-          useNativeDriver: true,
-          speed: 60,
-          bounciness: 15,
-        }),
-        Animated.spring(scaleAnim, {
-          toValue: 1,
-          useNativeDriver: true,
-          speed: 40,
-          bounciness: 10,
-        }),
-      ]).start();
-    }
-    prevFocused.current = focused;
-  }, [focused, scaleAnim]);
+function TabBarItem({ icon, label, focused }: TabBarIconProps) {
+  const scaleAnim = useRef(new Animated.Value(1)).current;
 
   return (
-    <Animated.View
-      style={[
-        styles.iconContainer,
-        { transform: [{ scale: scaleAnim }] },
-      ]}
-    >
-      <Icon color={color} size={21} strokeWidth={focused ? 2 : 1.4} />
-      {focused && <View style={styles.glowDot} />}
-      <Text
-        style={[
-          styles.tabLabel,
-          {
-            color: focused ? Colors.tabActive : Colors.tabInactive,
-            fontWeight: focused ? ("600" as const) : ("400" as const),
-          },
-        ]}
-      >
+    <Animated.View style={[styles.tabItem, { transform: [{ scale: scaleAnim }] }]}>
+      <View style={[styles.iconWrap, focused && styles.iconWrapActive]}>
+        {icon}
+      </View>
+      <Text style={[styles.tabLabel, focused ? styles.tabLabelActive : styles.tabLabelInactive]}>
         {label}
       </Text>
+      {focused && <View style={styles.activeDot} />}
     </Animated.View>
   );
 }
 
 export default function TabLayout() {
-  const insets = useSafeAreaInsets();
-  const bottomMargin = Math.max(insets.bottom, 12);
-
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: Colors.tabActive,
-        tabBarInactiveTintColor: Colors.tabInactive,
+        tabBarStyle: styles.tabBar,
         tabBarShowLabel: false,
-        tabBarStyle: {
-          position: "absolute" as const,
-          bottom: bottomMargin,
-          left: 16,
-          right: 16,
-          height: 66,
-          backgroundColor: Colors.tabBar,
-          borderTopWidth: 0,
-          borderTopColor: "transparent",
-          elevation: 12,
-          borderRadius: 28,
-          shadowColor: "#000",
-          shadowOffset: { width: 0, height: 10 },
-          shadowOpacity: 0.5,
-          shadowRadius: 20,
-          paddingBottom: 0,
-          paddingHorizontal: 6,
-          borderWidth: 0,
-        },
-        tabBarItemStyle: {
-          paddingTop: 8,
-          paddingBottom: 8,
-        },
+        tabBarActiveTintColor: "#FFFFFF",
+        tabBarInactiveTintColor: "#666666",
       }}
+      tabBar={(props) => <CustomTabBar {...props} />}
     >
       <Tabs.Screen
         name="(home)"
         options={{
           title: "ホーム",
           tabBarIcon: ({ color, focused }) => (
-            <TabIcon Icon={Home} color={color} focused={focused} label="ホーム" />
+            <TabBarItem
+              icon={<Home color={color} size={22} strokeWidth={focused ? 2 : 1.5} />}
+              label="ホーム"
+              focused={focused}
+            />
           ),
         }}
       />
@@ -114,11 +57,10 @@ export default function TabLayout() {
         options={{
           title: "チャット",
           tabBarIcon: ({ color, focused }) => (
-            <TabIcon
-              Icon={MessageSquare}
-              color={color}
-              focused={focused}
+            <TabBarItem
+              icon={<MessageCircle color={color} size={22} strokeWidth={focused ? 2 : 1.5} />}
               label="チャット"
+              focused={focused}
             />
           ),
         }}
@@ -128,11 +70,10 @@ export default function TabLayout() {
         options={{
           title: "記録",
           tabBarIcon: ({ color, focused }) => (
-            <TabIcon
-              Icon={CalendarDays}
-              color={color}
-              focused={focused}
+            <TabBarItem
+              icon={<CalendarDays color={color} size={22} strokeWidth={focused ? 2 : 1.5} />}
               label="記録"
+              focused={focused}
             />
           ),
         }}
@@ -142,7 +83,11 @@ export default function TabLayout() {
         options={{
           title: "プロフィール",
           tabBarIcon: ({ color, focused }) => (
-            <TabIcon Icon={User} color={color} focused={focused} label="プロフィール" />
+            <TabBarItem
+              icon={<UserCircle color={color} size={22} strokeWidth={focused ? 2 : 1.5} />}
+              label="プロフィール"
+              focused={focused}
+            />
           ),
         }}
       />
@@ -150,30 +95,116 @@ export default function TabLayout() {
   );
 }
 
+function CustomTabBar({ state, descriptors, navigation }: any) {
+  const scaleAnims = useRef(state.routes.map(() => new Animated.Value(1))).current;
+
+  return (
+    <View style={styles.tabBarOuter}>
+      <View style={styles.tabBarPill}>
+        {state.routes.map((route: any, index: number) => {
+          const { options } = descriptors[route.key];
+          const focused = state.index === index;
+
+          const onPress = () => {
+            void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            Animated.sequence([
+              Animated.timing(scaleAnims[index], { toValue: 1.15, duration: 100, useNativeDriver: true }),
+              Animated.spring(scaleAnims[index], { toValue: 1, friction: 4, useNativeDriver: true }),
+            ]).start();
+
+            const event = navigation.emit({ type: "tabPress", target: route.key, canPreventDefault: true });
+            if (!focused && !event.defaultPrevented) {
+              navigation.navigate(route.name);
+            }
+          };
+
+          return (
+            <Pressable key={route.key} onPress={onPress} style={styles.tabPressable}>
+              <Animated.View style={{ transform: [{ scale: scaleAnims[index] }] }}>
+                {options.tabBarIcon?.({
+                  color: focused ? "#FFFFFF" : "#666666",
+                  focused,
+                  size: 22,
+                })}
+              </Animated.View>
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  iconContainer: {
+  tabBar: {
+    display: "none",
+  },
+  tabBarOuter: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 16,
+    paddingBottom: Platform.OS === "ios" ? 28 : 16,
+    alignItems: "center",
+  },
+  tabBarPill: {
+    flexDirection: "row",
+    backgroundColor: "#1C1C1E",
+    borderRadius: 28,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+    ...Platform.select({
+      web: {
+        boxShadow: "0 8px 32px rgba(0,0,0,0.6)",
+      },
+      default: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.5,
+        shadowRadius: 24,
+        elevation: 20,
+      },
+    }),
+  },
+  tabPressable: {
+    flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    width: 60,
-    height: 50,
-    gap: 3,
-    position: "relative",
+    paddingVertical: 6,
   },
-  glowDot: {
+  tabItem: {
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+  },
+  iconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  iconWrapActive: {
+    backgroundColor: "rgba(255,255,255,0.1)",
+  },
+  tabLabel: {
+    fontSize: 10,
+    letterSpacing: 0.3,
+  },
+  tabLabelActive: {
+    color: "#FFFFFF",
+    fontWeight: "500" as const,
+  },
+  tabLabelInactive: {
+    color: "#666666",
+    fontWeight: "400" as const,
+  },
+  activeDot: {
     width: 4,
     height: 4,
     borderRadius: 2,
-    backgroundColor: Colors.tabActive,
-    position: "absolute",
-    bottom: 0,
-    shadowColor: Colors.tabActive,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.8,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  tabLabel: {
-    fontSize: 9,
-    letterSpacing: 0.3,
+    backgroundColor: "#C0392B",
+    marginTop: 2,
   },
 });
